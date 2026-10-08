@@ -18,8 +18,16 @@ const SESSION_DAYS = 30;
 const PAGE = 12;
 const MB = 1024 * 1024;
 
+// Railway sets these on every deploy.
+const ON_RAILWAY = !!(process.env.RAILWAY_ENVIRONMENT_NAME || process.env.RAILWAY_PROJECT_ID);
+
+// Uploads and the database live on a persistent volume when one is attached.
+function defaultDataDir() {
+  return process.env.LUMA_DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, 'data');
+}
+
 function createApp(options = {}) {
-  const dataDir = options.dataDir || process.env.LUMA_DATA_DIR || path.join(__dirname, 'data');
+  const dataDir = options.dataDir || defaultDataDir();
   const uploadDir = path.join(dataDir, 'uploads');
   fs.mkdirSync(uploadDir, { recursive: true });
 
@@ -35,7 +43,9 @@ function createApp(options = {}) {
 
   const app = express();
   app.disable('x-powered-by');
-  if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY);
+  // Behind Railway's HTTPS proxy, trust it so req.secure (and Secure cookies) work.
+  const trustProxy = process.env.TRUST_PROXY || (ON_RAILWAY ? '1' : '');
+  if (trustProxy) app.set('trust proxy', /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
 
   app.use((req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff');
@@ -261,6 +271,12 @@ function createApp(options = {}) {
     const token = readCookie(req, SESSION_COOKIE);
     if (token) q('DELETE FROM sessions WHERE token_hash = ?').run(sha256(token));
     res.clearCookie(SESSION_COOKIE, { path: '/' });
+    res.json({ ok: true });
+  });
+
+  // Used by Railway's deploy healthcheck.
+  app.get('/api/health', (req, res) => {
+    q('SELECT 1').get();
     res.json({ ok: true });
   });
 
@@ -948,9 +964,28 @@ function createApp(options = {}) {
 
 if (require.main === module) {
   const port = Number(process.env.PORT) || 3000;
-  createApp().listen(port, () => {
-    console.log(`Luma is running at http://localhost:${port}`);
+  const dataDir = defaultDataDir();
+  if (ON_RAILWAY && !process.env.RAILWAY_VOLUME_MOUNT_PATH && !process.env.LUMA_DATA_DIR) {
+    console.warn(
+      'WARNING: No Railway volume is attached. Accounts and uploads will be lost on every redeploy. ' +
+        'Attach a volume to this service (any mount path, e.g. /data).',
+    );
+  }
+  const app = createApp({ dataDir });
+  const server = app.listen(port, () => {
+    console.log(`Luma is running on port ${port} (data: ${dataDir})`);
   });
+
+  // Railway sends SIGTERM before replacing a deploy; finish in-flight requests first.
+  const shutdown = () => {
+    server.close(() => {
+      app.locals.db.close();
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 10000).unref();
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 }
 
 module.exports = { createApp };

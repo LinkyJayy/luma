@@ -36,16 +36,41 @@ npm test
 
 Service workers (and installing the app) need **HTTPS** in production; `localhost` works for development.
 
+## Deploy on Railway
+
+Luma ships with a `Dockerfile` and a `railway.json`, so Railway builds and runs it with no extra setup.
+
+1. In Railway, create a **New Project → Deploy from GitHub repo** and pick this repository (and the branch you want to deploy).
+2. **Attach a volume** to the service (right-click the service → *Attach volume*, or `railway volume add`). Any mount path works, e.g. `/data`. Luma stores its database and every upload there automatically via `RAILWAY_VOLUME_MOUNT_PATH`.
+   **Without a volume, all accounts and uploads are wiped on every redeploy.** The logs print a warning if one is missing.
+3. Under **Settings → Networking**, click **Generate Domain**. Railway serves it over HTTPS, which the PWA needs to be installable.
+4. Open the URL and **sign up right away**. The first account becomes the owner and admin.
+
+What the Railway setup does:
+
+- **Build**: the `Dockerfile` uses Node 22 plus `ffmpeg`, so ffprobe checks the 15-minute reel limit exactly for every video format.
+- **Port**: listens on Railway's `PORT`.
+- **Healthcheck**: `/api/health`. Railway only switches traffic to a new deploy once it responds.
+- **Restarts**: on failure, up to 5 times.
+- **HTTPS**: Railway's proxy is trusted automatically, so session cookies are marked `Secure`.
+- **Shutdown**: on redeploy, in-flight requests finish and the database is closed cleanly.
+
+Notes:
+
+- A Railway volume is tied to one service with one replica. Keep the service at **1 replica**, because SQLite and local uploads aren't shared between instances.
+- Large reels (up to `LUMA_MAX_VIDEO_MB`, default 1 GB) count against the volume's size. Grow the volume, or lower the limit, to fit your plan.
+- You can set any variable from the table below in the service's **Variables** tab.
+
 ### Configuration (environment variables)
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP port |
-| `LUMA_DATA_DIR` | `./data` | SQLite database + uploaded media |
+| `LUMA_DATA_DIR` | Railway volume, else `./data` | SQLite database + uploaded media |
 | `LUMA_MAX_VIDEO_MB` | `1024` | Max reel video size |
 | `LUMA_MAX_IMAGE_MB` | `20` | Max picture / cover / avatar size |
 | `LUMA_MAX_AUDIO_MB` | `150` | Max song size |
-| `TRUST_PROXY` | unset | Set (e.g. `1`) when behind a TLS-terminating proxy so cookies are marked `Secure` |
+| `TRUST_PROXY` | `1` on Railway, else unset | Set (e.g. `1`) when behind a TLS-terminating proxy so cookies are marked `Secure` |
 
 Install `ffmpeg`/`ffprobe` on the server to get exact length checks for every video format. Without it, MP4/MOV lengths are still read from the file, and WebM falls back to the length the browser reports.
 
@@ -59,4 +84,6 @@ lib/social.js        Social link validation
 public/              The PWA (index.html, js/app.js, css/app.css, sw.js, manifest)
 public/img/          Logo, verified badge, social badges
 test/                API + admin tests (node:test)
+Dockerfile           Container image (Node 22 + ffmpeg)
+railway.json         Railway build/deploy settings
 ```
