@@ -43,7 +43,15 @@ Luma ships with a `Dockerfile` and a `railway.json`, so Railway builds and runs 
 1. In Railway, create a **New Project → Deploy from GitHub repo** and pick this repository (and the branch you want to deploy).
 2. **Attach a volume** to the service (right-click the service → *Attach volume*, or `railway volume add`). Any mount path works, e.g. `/data`. Luma stores its database and every upload there automatically via `RAILWAY_VOLUME_MOUNT_PATH`.
    **Without a volume, all accounts and uploads are wiped on every redeploy.** The logs print a warning if one is missing.
-3. Under **Settings → Networking**, click **Generate Domain**. Railway serves it over HTTPS, which the PWA needs to be installable.
+3. Under **Settings → Networking**, click **Generate Domain** and set the port to **8080**. Railway serves it over HTTPS, which the PWA needs to be installable.
+
+### "Application failed to respond"
+
+This almost always means the domain points at a different port than Luma is listening on.
+
+1. Open the latest deploy's **Deploy Logs** and find `Luma is running on port …`.
+2. Go to **Settings → Networking**, then edit the domain (pencil icon). Set its port to that same number, usually **8080**.
+3. If that log line is missing, Luma crashed while starting. The error just above it in the logs says why.
 4. Open the URL and **sign up right away**. The first account becomes the owner and admin.
 
 What the Railway setup does:
@@ -65,7 +73,7 @@ Notes:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `PORT` | `3000` | HTTP port |
+| `PORT` | `8080` in Docker/Railway, else `3000` | HTTP port |
 | `LUMA_DATA_DIR` | Railway volume, else `./data` | SQLite database + uploaded media |
 | `LUMA_MAX_VIDEO_MB` | `1024` | Max reel video size |
 | `LUMA_MAX_IMAGE_MB` | `20` | Max picture / cover / avatar size |

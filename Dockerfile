@@ -14,6 +14,10 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY . .
 
+# Railway routes its public domain to $PORT (8080 unless you change it). Default to the
+# same port so the domain, the container and the app always agree.
+ENV PORT=8080
+EXPOSE 8080
+
 # Runs as root so the app can write to a Railway volume, which is mounted root-owned.
-EXPOSE 3000
 CMD ["node", "--disable-warning=ExperimentalWarning", "server.js"]

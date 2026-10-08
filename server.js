@@ -974,6 +974,9 @@ if (require.main === module) {
   const app = createApp({ dataDir });
   const server = app.listen(port, () => {
     console.log(`Luma is running on port ${port} (data: ${dataDir})`);
+    if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+      console.log(`Public URL: https://${process.env.RAILWAY_PUBLIC_DOMAIN} (its target port must be ${port})`);
+    }
   });
 
   // Railway sends SIGTERM before replacing a deploy; finish in-flight requests first.
