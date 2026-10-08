@@ -83,6 +83,9 @@ function createApp(options = {}) {
     };
   }
 
+  // What a signed-in user sees about themselves.
+  const selfUser = (u) => ({ ...publicUser(u), isAdmin: !!u.is_admin, isOwner: !!u.is_owner });
+
   async function hashPassword(password) {
     const salt = crypto.randomBytes(16);
     const key = await scrypt(password, salt, 64);
@@ -128,7 +131,7 @@ function createApp(options = {}) {
     if (token) {
       const row = q(
         `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
-         WHERE s.token_hash = ? AND s.expires_at > ?`,
+         WHERE s.token_hash = ? AND s.expires_at > ? AND u.banned = 0`,
       ).get(sha256(token), now());
       if (row) req.user = row;
     }
@@ -232,12 +235,12 @@ function createApp(options = {}) {
     const first = !q('SELECT 1 FROM users LIMIT 1').get();
     const hash = await hashPassword(password);
     const { lastInsertRowid } = q(
-      `INSERT INTO users (username, display_name, password_hash, verified, is_admin, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(username, displayName, hash, first ? 1 : 0, first ? 1 : 0, now());
+      `INSERT INTO users (username, display_name, password_hash, verified, is_admin, is_owner, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(username, displayName, hash, first ? 1 : 0, first ? 1 : 0, first ? 1 : 0, now());
     startSession(req, res, Number(lastInsertRowid));
     const user = q('SELECT * FROM users WHERE id = ?').get(lastInsertRowid);
-    res.status(201).json({ user: { ...publicUser(user), isAdmin: !!user.is_admin } });
+    res.status(201).json({ user: selfUser(user) });
   });
 
   app.post('/api/auth/login', async (req, res) => {
@@ -247,8 +250,11 @@ function createApp(options = {}) {
     if (!user || !(await checkPassword(password, user.password_hash))) {
       fail(401, 'Wrong username or password.');
     }
+    if (user.banned) {
+      fail(403, `This account has been suspended.${user.ban_reason ? ` Reason: ${user.ban_reason}` : ''}`);
+    }
     startSession(req, res, user.id);
-    res.json({ user: { ...publicUser(user), isAdmin: !!user.is_admin } });
+    res.json({ user: selfUser(user) });
   });
 
   app.post('/api/auth/logout', (req, res) => {
@@ -260,7 +266,7 @@ function createApp(options = {}) {
 
   app.get('/api/me', (req, res) => {
     if (!req.user) return res.json({ user: null });
-    res.json({ user: { ...publicUser(req.user), isAdmin: !!req.user.is_admin } });
+    res.json({ user: selfUser(req.user) });
   });
 
   app.patch(
@@ -295,7 +301,7 @@ function createApp(options = {}) {
       );
       if (avatarFile && u.avatar) removeUpload(u.avatar);
       const user = q('SELECT * FROM users WHERE id = ?').get(u.id);
-      res.json({ user: { ...publicUser(user), isAdmin: !!user.is_admin } });
+      res.json({ user: selfUser(user) });
     }),
   );
 
@@ -313,14 +319,15 @@ function createApp(options = {}) {
 
   // ---------- users ----------
 
-  function getUserOr404(username) {
+  // Suspended accounts are invisible to everyone except admins.
+  function getUserOr404(username, viewer) {
     const u = q('SELECT * FROM users WHERE username = ?').get(String(username).toLowerCase());
-    if (!u) fail(404, 'User not found.');
+    if (!u || (u.banned && !viewer?.is_admin)) fail(404, 'User not found.');
     return u;
   }
 
   app.get('/api/users/:username', (req, res) => {
-    const u = getUserOr404(req.params.username);
+    const u = getUserOr404(req.params.username, req.user);
     const count = (sql) => q(sql).get(u.id).n;
     res.json({
       user: publicUser(u),
@@ -335,11 +342,12 @@ function createApp(options = {}) {
         ? !!q('SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?').get(req.user.id, u.id)
         : false,
       isMe: req.user?.id === u.id,
+      moderation: req.user?.is_admin ? moderationOut(u) : undefined,
     });
   });
 
   app.post('/api/users/:username/follow', requireAuth, (req, res) => {
-    const u = getUserOr404(req.params.username);
+    const u = getUserOr404(req.params.username, req.user);
     if (u.id === req.user.id) fail(400, "You can't follow yourself.");
     const existing = q('SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?').get(req.user.id, u.id);
     if (existing) q('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?').run(req.user.id, u.id);
@@ -347,25 +355,17 @@ function createApp(options = {}) {
     res.json({ following: !existing });
   });
 
-  app.post('/api/users/:username/verify', requireAuth, (req, res) => {
-    if (!req.user.is_admin) fail(403, 'Only admins can verify accounts.');
-    const u = getUserOr404(req.params.username);
-    const verified = req.body?.verified === undefined ? !u.verified : !!req.body.verified;
-    q('UPDATE users SET verified = ? WHERE id = ?').run(verified ? 1 : 0, u.id);
-    res.json({ verified });
-  });
-
   app.get('/api/search', (req, res) => {
     const term = clean(req.query.q, 50).replace(/^@/, '');
     if (!term) return res.json({ users: [], tracks: [] });
     const like = `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     const users = q(
-      `SELECT * FROM users WHERE username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\'
+      `SELECT * FROM users WHERE banned = 0 AND (username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\')
        ORDER BY verified DESC, id LIMIT 20`,
     ).all(like, like);
     const tracks = q(
       `SELECT ${TRACK_COLS} FROM tracks t JOIN users u ON u.id = t.user_id
-       WHERE t.title LIKE ? ESCAPE '\\' OR t.artist LIKE ? ESCAPE '\\' OR t.album LIKE ? ESCAPE '\\'
+       WHERE u.banned = 0 AND (t.title LIKE ? ESCAPE '\\' OR t.artist LIKE ? ESCAPE '\\' OR t.album LIKE ? ESCAPE '\\')
        ORDER BY t.plays DESC LIMIT 20`,
     ).all(like, like, like);
     res.json({ users: users.map(publicUser), tracks: tracks.map(trackOut) });
@@ -373,7 +373,7 @@ function createApp(options = {}) {
 
   // ---------- reels (videos + pictures) ----------
 
-  const POST_COLS = `p.*, u.username, u.display_name, u.avatar AS u_avatar, u.verified AS u_verified,
+  const POST_COLS = `p.*, u.username, u.display_name, u.avatar AS u_avatar, u.verified AS u_verified, u.banned AS u_banned,
     (SELECT COUNT(*) FROM likes WHERE post_id = p.id) AS like_count,
     (SELECT COUNT(*) FROM comments WHERE post_id = p.id) AS comment_count`;
 
@@ -416,13 +416,13 @@ function createApp(options = {}) {
     if (typeFilter) params.push(req.query.type);
     const rows = q(
       `SELECT ${POST_COLS} FROM posts p JOIN users u ON u.id = p.user_id
-       WHERE p.id < ? ${filter} ${typeFilter} ORDER BY p.id DESC LIMIT ${PAGE + 1}`,
+       WHERE p.id < ? AND u.banned = 0 ${filter} ${typeFilter} ORDER BY p.id DESC LIMIT ${PAGE + 1}`,
     ).all(...params);
     res.json(page(rows, (r) => postOut(r, req.user)));
   });
 
   app.get('/api/users/:username/posts', (req, res) => {
-    const u = getUserOr404(req.params.username);
+    const u = getUserOr404(req.params.username, req.user);
     const rows = q(
       `SELECT ${POST_COLS} FROM posts p JOIN users u ON u.id = p.user_id
        WHERE p.user_id = ? AND p.id < ? ORDER BY p.id DESC LIMIT ${PAGE + 1}`,
@@ -434,7 +434,7 @@ function createApp(options = {}) {
     const row = q(`SELECT ${POST_COLS} FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id = ?`).get(
       Number(req.params.id),
     );
-    if (!row) fail(404, 'Post not found.');
+    if (!row || (row.u_banned && !req.user?.is_admin)) fail(404, 'Post not found.');
     res.json({ post: postOut(row, req.user) });
   });
 
@@ -474,8 +474,8 @@ function createApp(options = {}) {
     const post = q('SELECT * FROM posts WHERE id = ?').get(Number(req.params.id));
     if (!post) fail(404, 'Post not found.');
     if (post.user_id !== req.user.id && !req.user.is_admin) fail(403, "That isn't your post.");
-    q('DELETE FROM posts WHERE id = ?').run(post.id);
-    JSON.parse(post.media).forEach(removeUpload);
+    deletePost(post);
+    if (post.user_id !== req.user.id) logAction(req.user, 'delete_post', `post #${post.id}`);
     res.json({ ok: true });
   });
 
@@ -499,7 +499,7 @@ function createApp(options = {}) {
   app.get('/api/posts/:id/comments', (req, res) => {
     const rows = q(
       `SELECT c.*, u.username, u.display_name, u.avatar, u.verified FROM comments c
-       JOIN users u ON u.id = c.user_id WHERE c.post_id = ? ORDER BY c.id DESC LIMIT 200`,
+       JOIN users u ON u.id = c.user_id WHERE c.post_id = ? AND u.banned = 0 ORDER BY c.id DESC LIMIT 200`,
     ).all(Number(req.params.id));
     res.json({ comments: rows.map(commentOut) });
   });
@@ -544,13 +544,13 @@ function createApp(options = {}) {
   app.get('/api/tracks', (req, res) => {
     const rows = q(
       `SELECT ${TRACK_COLS} FROM tracks t JOIN users u ON u.id = t.user_id
-       WHERE t.id < ? ORDER BY t.id DESC LIMIT ${PAGE + 1}`,
+       WHERE t.id < ? AND u.banned = 0 ORDER BY t.id DESC LIMIT ${PAGE + 1}`,
     ).all(cursorOf(req));
     res.json(page(rows, trackOut));
   });
 
   app.get('/api/users/:username/tracks', (req, res) => {
-    const u = getUserOr404(req.params.username);
+    const u = getUserOr404(req.params.username, req.user);
     const rows = q(
       `SELECT ${TRACK_COLS} FROM tracks t JOIN users u ON u.id = t.user_id
        WHERE t.user_id = ? AND t.id < ? ORDER BY t.id DESC LIMIT ${PAGE + 1}`,
@@ -600,10 +600,301 @@ function createApp(options = {}) {
     const t = q('SELECT * FROM tracks WHERE id = ?').get(Number(req.params.id));
     if (!t) fail(404, 'Song not found.');
     if (t.user_id !== req.user.id && !req.user.is_admin) fail(403, "That isn't your song.");
+    deleteTrack(t);
+    if (t.user_id !== req.user.id) logAction(req.user, 'delete_track', `song #${t.id} “${t.title}”`);
+    res.json({ ok: true });
+  });
+
+  // ---------- content removal ----------
+
+  function deletePost(post) {
+    q('DELETE FROM posts WHERE id = ?').run(post.id);
+    JSON.parse(post.media).forEach(removeUpload);
+  }
+
+  function deleteTrack(t) {
     q('DELETE FROM tracks WHERE id = ?').run(t.id);
     removeUpload(t.audio);
     removeUpload(t.cover);
+  }
+
+  function logAction(admin, action, detail) {
+    q('INSERT INTO admin_log (admin_id, action, detail, created_at) VALUES (?, ?, ?, ?)').run(
+      admin.id,
+      action,
+      detail,
+      now(),
+    );
+  }
+
+  app.delete('/api/comments/:id', requireAuth, (req, res) => {
+    const c = q('SELECT c.*, p.user_id AS post_owner FROM comments c JOIN posts p ON p.id = c.post_id WHERE c.id = ?').get(
+      Number(req.params.id),
+    );
+    if (!c) fail(404, 'Comment not found.');
+    // The commenter, the reel's author and admins can remove a comment.
+    if (c.user_id !== req.user.id && c.post_owner !== req.user.id && !req.user.is_admin) {
+      fail(403, "You can't delete that comment.");
+    }
+    q('DELETE FROM comments WHERE id = ?').run(c.id);
+    if (req.user.is_admin && c.user_id !== req.user.id && c.post_owner !== req.user.id) {
+      logAction(req.user, 'delete_comment', `comment #${c.id}`);
+    }
     res.json({ ok: true });
+  });
+
+  // ---------- reports ----------
+
+  const REPORT_TARGETS = {
+    post: 'SELECT user_id AS owner FROM posts WHERE id = ?',
+    track: 'SELECT user_id AS owner FROM tracks WHERE id = ?',
+    comment: 'SELECT user_id AS owner FROM comments WHERE id = ?',
+    user: 'SELECT id AS owner FROM users WHERE id = ?',
+  };
+
+  app.post('/api/reports', requireAuth, (req, res) => {
+    const type = String(req.body?.type ?? '');
+    const targetId = Number(req.body?.id);
+    const reason = clean(req.body?.reason, 500);
+    if (!REPORT_TARGETS[type] || !Number.isInteger(targetId)) fail(400, 'Invalid report.');
+    if (!reason) fail(400, 'Tell us what is wrong.');
+    const target = q(REPORT_TARGETS[type]).get(targetId);
+    if (!target) fail(404, 'That no longer exists.');
+    if (target.owner === req.user.id) fail(400, "You can't report your own content.");
+    const dupe = q(
+      `SELECT 1 FROM reports WHERE reporter_id = ? AND target_type = ? AND target_id = ? AND status = 'open'`,
+    ).get(req.user.id, type, targetId);
+    if (!dupe) {
+      q('INSERT INTO reports (reporter_id, target_type, target_id, reason, created_at) VALUES (?, ?, ?, ?, ?)').run(
+        req.user.id,
+        type,
+        targetId,
+        reason,
+        now(),
+      );
+    }
+    res.status(201).json({ ok: true });
+  });
+
+  // ---------- admin tools ----------
+
+  function requireAdmin(req, res, next) {
+    if (!req.user) return res.status(401).json({ error: 'Please sign in first.' });
+    if (!req.user.is_admin) return res.status(403).json({ error: 'Admins only.' });
+    next();
+  }
+  app.use('/api/admin', requireAdmin);
+
+  function moderationOut(u) {
+    return { admin: !!u.is_admin, owner: !!u.is_owner, banned: !!u.banned, banReason: u.ban_reason };
+  }
+
+  function adminUserOut(u) {
+    const count = (sql) => q(sql).get(u.id).n;
+    return {
+      ...publicUser(u),
+      ...moderationOut(u),
+      createdAt: u.created_at,
+      posts: count('SELECT COUNT(*) n FROM posts WHERE user_id = ?'),
+      tracks: count('SELECT COUNT(*) n FROM tracks WHERE user_id = ?'),
+      reports: count(
+        `SELECT COUNT(*) n FROM reports r WHERE r.status = 'open' AND (
+           (r.target_type = 'user' AND r.target_id = ?1)
+           OR (r.target_type = 'post' AND r.target_id IN (SELECT id FROM posts WHERE user_id = ?1))
+           OR (r.target_type = 'track' AND r.target_id IN (SELECT id FROM tracks WHERE user_id = ?1))
+           OR (r.target_type = 'comment' AND r.target_id IN (SELECT id FROM comments WHERE user_id = ?1)))`,
+      ),
+    };
+  }
+
+  // Who may change what: the owner can do anything to anyone but themselves
+  // losing control; other admins can verify and moderate regular users only.
+  function assertCanManage(actor, target, { admin, banned }) {
+    if (target.id === actor.id && banned === true) fail(400, "You can't suspend yourself.");
+    if (target.is_owner && !actor.is_owner) fail(403, "Only the owner can change the owner's account.");
+    if (target.is_owner && (admin === false || banned === true)) fail(400, "The owner can't be demoted or suspended.");
+    if (admin !== undefined && !actor.is_owner) fail(403, 'Only the owner can give or remove admin.');
+    if (target.is_admin && !target.is_owner && !actor.is_owner && banned !== undefined) {
+      fail(403, 'Only the owner can suspend another admin.');
+    }
+  }
+
+  app.get('/api/admin/stats', (req, res) => {
+    const n = (sql) => q(sql).get().n;
+    res.json({
+      users: n('SELECT COUNT(*) n FROM users'),
+      verified: n('SELECT COUNT(*) n FROM users WHERE verified = 1'),
+      admins: n('SELECT COUNT(*) n FROM users WHERE is_admin = 1'),
+      banned: n('SELECT COUNT(*) n FROM users WHERE banned = 1'),
+      reels: n("SELECT COUNT(*) n FROM posts WHERE type = 'video'"),
+      pictures: n("SELECT COUNT(*) n FROM posts WHERE type = 'photo'"),
+      tracks: n('SELECT COUNT(*) n FROM tracks'),
+      comments: n('SELECT COUNT(*) n FROM comments'),
+      openReports: n("SELECT COUNT(*) n FROM reports WHERE status = 'open'"),
+      newUsersThisWeek: q('SELECT COUNT(*) n FROM users WHERE created_at > ?').get(now() - 7 * 864e5).n,
+    });
+  });
+
+  app.get('/api/admin/users', (req, res) => {
+    const term = clean(req.query.q, 50).replace(/^@/, '');
+    const filters = {
+      admins: 'AND is_admin = 1',
+      verified: 'AND verified = 1',
+      banned: 'AND banned = 1',
+    };
+    const where = filters[req.query.filter] || '';
+    const params = [cursorOf(req)];
+    let search = '';
+    if (term) {
+      const like = `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      search = "AND (username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\')";
+      params.push(like, like);
+    }
+    const rows = q(`SELECT * FROM users WHERE id < ? ${where} ${search} ORDER BY id DESC LIMIT ${PAGE + 1}`).all(
+      ...params,
+    );
+    res.json(page(rows, adminUserOut));
+  });
+
+  app.patch('/api/admin/users/:username', (req, res) => {
+    const target = getUserOr404(req.params.username, req.user);
+    const body = req.body || {};
+    const change = {
+      verified: typeof body.verified === 'boolean' ? body.verified : undefined,
+      admin: typeof body.admin === 'boolean' ? body.admin : undefined,
+      banned: typeof body.banned === 'boolean' ? body.banned : undefined,
+    };
+    assertCanManage(req.user, target, change);
+
+    const actions = [];
+    if (change.verified !== undefined && change.verified !== !!target.verified) {
+      q('UPDATE users SET verified = ? WHERE id = ?').run(change.verified ? 1 : 0, target.id);
+      actions.push(change.verified ? 'verify' : 'unverify');
+    }
+    if (change.admin !== undefined && change.admin !== !!target.is_admin) {
+      q('UPDATE users SET is_admin = ? WHERE id = ?').run(change.admin ? 1 : 0, target.id);
+      actions.push(change.admin ? 'make_admin' : 'remove_admin');
+    }
+    if (change.banned !== undefined && change.banned !== !!target.banned) {
+      const reason = change.banned ? clean(body.banReason, 300) : '';
+      q('UPDATE users SET banned = ?, ban_reason = ? WHERE id = ?').run(change.banned ? 1 : 0, reason, target.id);
+      // Signs the account out everywhere.
+      if (change.banned) q('DELETE FROM sessions WHERE user_id = ?').run(target.id);
+      actions.push(change.banned ? 'suspend' : 'unsuspend');
+    }
+    for (const a of actions) logAction(req.user, a, `@${target.username}`);
+    res.json({ user: adminUserOut(q('SELECT * FROM users WHERE id = ?').get(target.id)) });
+  });
+
+  // Removes everything a user has posted: reels, pictures, songs and comments.
+  app.post('/api/admin/users/:username/purge', (req, res) => {
+    const target = getUserOr404(req.params.username, req.user);
+    if (target.id !== req.user.id) {
+      if (target.is_owner) fail(403, "The owner's content can't be removed by others.");
+      if (target.is_admin && !req.user.is_owner) fail(403, "Only the owner can remove another admin's content.");
+    }
+    const posts = q('SELECT * FROM posts WHERE user_id = ?').all(target.id);
+    const tracks = q('SELECT * FROM tracks WHERE user_id = ?').all(target.id);
+    posts.forEach(deletePost);
+    tracks.forEach(deleteTrack);
+    const { changes } = q('DELETE FROM comments WHERE user_id = ?').run(target.id);
+    logAction(
+      req.user,
+      'purge',
+      `@${target.username}: ${posts.length} reels, ${tracks.length} songs, ${changes} comments`,
+    );
+    res.json({ posts: posts.length, tracks: tracks.length, comments: Number(changes) });
+  });
+
+  function reportTarget(type, id) {
+    if (type === 'post') {
+      const r = q(`SELECT ${POST_COLS} FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id = ?`).get(id);
+      return r && { ...postOut(r, null), owner: r.username };
+    }
+    if (type === 'track') {
+      const r = q(`SELECT ${TRACK_COLS} FROM tracks t JOIN users u ON u.id = t.user_id WHERE t.id = ?`).get(id);
+      return r && { ...trackOut(r), owner: r.username };
+    }
+    if (type === 'comment') {
+      const r = q(
+        `SELECT c.*, u.username, u.display_name, u.avatar, u.verified FROM comments c
+         JOIN users u ON u.id = c.user_id WHERE c.id = ?`,
+      ).get(id);
+      return r && { ...commentOut(r), postId: r.post_id, owner: r.username };
+    }
+    const u = q('SELECT * FROM users WHERE id = ?').get(id);
+    return u && { ...publicUser(u), ...moderationOut(u), owner: u.username };
+  }
+
+  app.get('/api/admin/reports', (req, res) => {
+    const status = req.query.status === 'resolved' ? "r.status != 'open'" : "r.status = 'open'";
+    const rows = q(
+      `SELECT r.*, u.username AS reporter, x.username AS resolver,
+         (SELECT COUNT(*) FROM reports o WHERE o.target_type = r.target_type AND o.target_id = r.target_id
+            AND o.status = 'open') AS open_count
+       FROM reports r JOIN users u ON u.id = r.reporter_id LEFT JOIN users x ON x.id = r.resolved_by
+       WHERE r.id < ? AND ${status} ORDER BY r.id DESC LIMIT ${PAGE + 1}`,
+    ).all(cursorOf(req));
+    res.json(
+      page(rows, (r) => ({
+        id: r.id,
+        type: r.target_type,
+        targetId: r.target_id,
+        reason: r.reason,
+        status: r.status,
+        reporter: r.reporter,
+        resolver: r.resolver,
+        openCount: r.open_count,
+        createdAt: r.created_at,
+        resolvedAt: r.resolved_at,
+        target: reportTarget(r.target_type, r.target_id) || null,
+      })),
+    );
+  });
+
+  // Resolves a report and every other open report on the same thing.
+  // "remove" deletes the content, or suspends the account for a user report.
+  app.post('/api/admin/reports/:id', (req, res) => {
+    const report = q('SELECT * FROM reports WHERE id = ?').get(Number(req.params.id));
+    if (!report) fail(404, 'Report not found.');
+    const action = req.body?.action;
+    if (!['remove', 'dismiss'].includes(action)) fail(400, 'Choose remove or dismiss.');
+
+    if (action === 'remove') {
+      const id = report.target_id;
+      if (report.target_type === 'post') {
+        const post = q('SELECT * FROM posts WHERE id = ?').get(id);
+        if (post) deletePost(post);
+      } else if (report.target_type === 'track') {
+        const t = q('SELECT * FROM tracks WHERE id = ?').get(id);
+        if (t) deleteTrack(t);
+      } else if (report.target_type === 'comment') {
+        q('DELETE FROM comments WHERE id = ?').run(id);
+      } else {
+        const u = q('SELECT * FROM users WHERE id = ?').get(id);
+        if (u) {
+          assertCanManage(req.user, u, { banned: true });
+          q('UPDATE users SET banned = 1, ban_reason = ? WHERE id = ?').run(clean(report.reason, 300), u.id);
+          q('DELETE FROM sessions WHERE user_id = ?').run(u.id);
+        }
+      }
+    }
+    const { changes } = q(
+      `UPDATE reports SET status = ?, resolved_by = ?, resolved_at = ?
+       WHERE target_type = ? AND target_id = ? AND status = 'open'`,
+    ).run(action === 'remove' ? 'removed' : 'dismissed', req.user.id, now(), report.target_type, report.target_id);
+    logAction(req.user, `report_${action}`, `${report.target_type} #${report.target_id}`);
+    res.json({ ok: true, resolved: Number(changes) });
+  });
+
+  app.get('/api/admin/log', (req, res) => {
+    const rows = q(
+      `SELECT l.*, u.username FROM admin_log l LEFT JOIN users u ON u.id = l.admin_id
+       ORDER BY l.id DESC LIMIT 100`,
+    ).all();
+    res.json({
+      items: rows.map((r) => ({ id: r.id, admin: r.username, action: r.action, detail: r.detail, createdAt: r.created_at })),
+    });
   });
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));

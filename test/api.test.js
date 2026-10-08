@@ -109,9 +109,9 @@ test('Luma API', async (t) => {
   });
 
   await t.test('admins can verify; others cannot', async () => {
-    assert.equal((await bob('/api/users/alice/verify', { method: 'POST', body: {} })).status, 403);
-    const r = await alice('/api/users/bob/verify', { method: 'POST', body: { verified: true } });
-    assert.equal(r.data.verified, true);
+    assert.equal((await bob('/api/admin/users/alice', { method: 'PATCH', body: { verified: false } })).status, 403);
+    const r = await alice('/api/admin/users/bob', { method: 'PATCH', body: { verified: true } });
+    assert.equal(r.data.user.verified, true);
     assert.equal((await bob('/api/users/bob')).data.user.verified, true);
   });
 

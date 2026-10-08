@@ -11,7 +11,16 @@ Luma is an installable web app (PWA) with accounts, **Luma Reels** (videos up to
   - Picture reels hold up to 10 photos in a swipeable carousel.
   - Likes, comments, sharing, and deleting your own posts.
 - **Luma Music**: upload a song (MP3, M4A, WAV, FLAC, OGG) with an **album cover**, title, artist and album. A mini player stays open across pages, with a full-screen player, queue, play counts and lock-screen controls (Media Session).
-- **Verified badge**: the glowing star shows next to verified names. The **first account created is the admin** (and verified). Admins can verify or unverify anyone from that person's profile.
+- **Verified badge**: the glowing star shows next to verified names.
+- **Admin tools** (`#/admin`, or the shield icon on your profile):
+  - The **first account created is the owner**. It is an admin, verified, and can't be demoted or suspended.
+  - **Owner**: can give and remove the verified badge, **make people admins** (or remove admin), and suspend or clean up anyone, including other admins.
+  - **Admins**: can give and remove verified badges and moderate regular users. They can't hand out admin, act on other admins, or touch the owner.
+  - **Reports**: anyone signed in can report a reel, song, comment or account. Admins review a queue with a preview of what was reported, then remove it (or suspend the account) or dismiss the report. One decision closes every open report on the same thing.
+  - **Suspend**: the person is signed out everywhere, can't sign in (they see the reason), and their profile, reels, songs and comments disappear for everyone except admins. Unsuspending brings everything back.
+  - **Remove all content**: deletes every reel, picture, song and comment from an account.
+  - **Overview** stats and an **audit log** of every admin action.
+  - Comments can be deleted by their author, the reel's author or an admin. Songs can be deleted by the uploader or an admin.
 - **Social badges**: TikTok, YouTube, Instagram, Facebook, X and Linktree. You can enter a username or a link in Settings, and the links only work for each platform's real domain.
 - Follows, search (people and songs), and profile grids for reels and music.
 
@@ -49,5 +58,5 @@ lib/media.js         Upload types, duration probing (15-minute limit)
 lib/social.js        Social link validation
 public/              The PWA (index.html, js/app.js, css/app.css, sw.js, manifest)
 public/img/          Logo, verified badge, social badges
-test/                API tests (node:test)
+test/                API + admin tests (node:test)
 ```
