@@ -13,10 +13,14 @@ const PNG = Buffer.from(
 // Starts Luma on a random port with a throwaway data directory.
 async function startServer(t) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'luma-test-'));
-  const server = createApp({ dataDir }).listen(0);
+  const app = createApp({ dataDir });
+  const server = app.listen(0);
+  const realtime = app.locals.attachRealtime(server);
   await new Promise((r) => server.once('listening', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   t.after(() => {
+    realtime.close();
+    server.closeAllConnections();
     server.close();
     fs.rmSync(dataDir, { recursive: true, force: true });
   });
@@ -24,7 +28,7 @@ async function startServer(t) {
   // A cookie-carrying API client, i.e. one signed-in browser.
   function client() {
     let cookie = '';
-    return async (p, { method = 'GET', body, form } = {}) => {
+    const call = async (p, { method = 'GET', body, form } = {}) => {
       const headers = { cookie };
       let payload;
       if (form) payload = form;
@@ -37,6 +41,8 @@ async function startServer(t) {
       if (set) cookie = set.split(';')[0];
       return { status: res.status, data: await res.json().catch(() => null) };
     };
+    call.cookie = () => cookie;
+    return call;
   }
 
   async function signUp(username) {

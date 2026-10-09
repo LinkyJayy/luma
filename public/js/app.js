@@ -1684,7 +1684,7 @@ async function route() {
   const parts = path.split('/').filter(Boolean);
   const [section, arg] = parts;
 
-  const tab = { reels: 'reels', p: 'reels', search: 'search', upload: 'upload', music: 'music', me: 'me', settings: 'me', admin: 'me' }[section] ||
+  const tab = { reels: 'reels', p: 'reels', search: 'search', upload: 'upload', music: 'music', me: 'me', settings: 'me', admin: 'me', play: 'play' }[section] ||
     (section === 'u' && state.me && arg === state.me.username ? 'me' : '');
   $$('.tabbar a').forEach((a) => a.classList.toggle('active', a.dataset.tab === tab));
   viewEl.scrollTop = 0;
@@ -1719,6 +1719,18 @@ async function route() {
     case 'admin':
       viewAdmin(params);
       break;
+    case 'play': {
+      // Luma Playables loads on demand so the rest of the app stays light.
+      const { viewPlay } = await import('/js/play/hub.js');
+      cleanup = await viewPlay(viewEl, parts, params, {
+        me: state.me,
+        toast,
+        requireLogin: () => {
+          location.hash = `#/login?next=${encodeURIComponent(location.hash.slice(1))}`;
+        },
+      });
+      break;
+    }
     case 'login':
     case 'register':
       viewAuth(section, params);

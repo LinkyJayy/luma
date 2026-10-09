@@ -18,6 +18,7 @@
   "shortcuts": [
     { "name": "Luma Reels", "url": "/#/reels", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Luma Music", "url": "/#/music", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Luma Playables", "url": "/#/play", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Create", "url": "/#/upload", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }

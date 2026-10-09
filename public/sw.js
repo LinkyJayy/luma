@@ -1,6 +1,6 @@
 // Luma service worker: keeps the app shell available offline.
 // Bump VERSION whenever shell files change.
-const VERSION = 'luma-v2';
+const VERSION = 'luma-v3';
 const SHELL = [
   '/',
   '/index.html',

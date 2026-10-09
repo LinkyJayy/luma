@@ -21,6 +21,12 @@ Luma is an installable web app (PWA) with accounts, **Luma Reels** (videos up to
   - **Remove all content**: deletes every reel, picture, song and comment from an account.
   - **Overview** stats and an **audit log** of every admin action.
   - Comments can be deleted by their author, the reel's author or an admin. Songs can be deleted by the uploader or an admin.
+- **Luma Playables** (`#/play`, the **Play** tab): five games. Multiplayer uses rooms with a 4-letter code or invite link; you need to be signed in to host or join. Every multiplayer game offers 13 team colours: red, orange, yellow, green, teal, blue, purple, pink, hot pink, white, light gray, dark gray and brown. Characters and circles are recoloured to match each team.
+  - **LumaKart** (2–8 players): a night-time race where each player is a star kart in their chosen colour, racing 1, 3 or 5 laps. Item boxes give power-ups: **Double speed** (1.5× speed), **Triple speed** (2× speed) and **Thunder** (2× speed, and freezes everyone else for 5 seconds).
+  - **Circle Chaos** (2–8 players): 15 rounds, so 15 turns each. On your turn your character lights up in your team colour. Tap a circle in your colour (+1) or a rainbow circle: **−2** or **−4** takes that many from any player you choose and gives them to you. Most circles wins.
+  - **StarEscape** (solo or multiplayer): a Subway Surfers-style runner. Switch lanes, jump and slide past barriers and trains, and collect bolts while a black-star cop chases you. In multiplayer the host decides who runs and who plays a cop: one cop against everyone, or any mix.
+  - **StarInvaders** (solo or multiplayer): Space Invaders, where your star fires bolts at circles worth 10–50 points each. Rounds last 2 minutes and the highest score wins.
+  - **StarWordle**: Wordle, with a daily word that's the same for everyone, unlimited practice words, stats and a shareable result grid.
 - **Social badges**: TikTok, YouTube, Instagram, Facebook, X and Linktree. You can enter a username or a link in Settings, and the links only work for each platform's real domain.
 - Follows, search (people and songs), and profile grids for reels and music.
 
@@ -68,6 +74,7 @@ Notes:
 - A Railway volume is tied to one service with one replica. Keep the service at **1 replica**, because SQLite and local uploads aren't shared between instances.
 - Large reels (up to `LUMA_MAX_VIDEO_MB`, default 1 GB) count against the volume's size. Grow the volume, or lower the limit, to fit your plan.
 - You can set any variable from the table below in the service's **Variables** tab.
+- Luma Playables multiplayer uses WebSockets on the same port, which Railway supports with no extra setup. Each game runs in the host's browser, so the host should keep the game open in the foreground.
 
 ### Configuration (environment variables)
 
@@ -89,9 +96,11 @@ server.js            Express API + static hosting
 lib/db.js            SQLite schema
 lib/media.js         Upload types, duration probing (15-minute limit)
 lib/social.js        Social link validation
+lib/rooms.js         Multiplayer rooms over WebSockets (/ws/play)
 public/              The PWA (index.html, js/app.js, css/app.css, sw.js, manifest)
-public/img/          Logo, verified badge, social badges
-test/                API + admin tests (node:test)
+public/js/play/      Luma Playables: hub/lobby, one module per game, shared helpers
+public/img/          Logo, verified badge, social badges, game sprites (img/play)
+test/                API, admin, rooms and LumaKart race tests (node:test)
 Dockerfile           Container image (Node 22 + ffmpeg)
 railway.json         Railway build/deploy settings
 ```

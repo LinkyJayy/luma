@@ -446,3 +446,174 @@ textarea.input { resize: vertical; min-height: 84px; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Luma Playables ---------- */
+
+.join-row { display: flex; gap: 8px; margin: 4px 0 16px; }
+.join-row .input { text-transform: uppercase; letter-spacing: .15em; font-weight: 700; }
+.game-list { display: grid; gap: 12px; }
+.game-card {
+  display: flex; align-items: center; gap: 14px; padding: 14px;
+  background: var(--surface); border: 1px solid #262626; border-radius: var(--radius); text-decoration: none;
+}
+.game-card:hover { border-color: var(--accent); }
+.game-card .meta { min-width: 0; }
+.game-card .title { font-weight: 800; font-size: 17px; }
+.game-card .sub { color: var(--muted); font-size: 14px; margin-bottom: 6px; }
+.game-icon { width: 64px; height: 64px; object-fit: contain; flex: none; filter: drop-shadow(0 0 12px rgba(255, 208, 0, .25)); }
+.game-hero { text-align: center; margin-bottom: 16px; }
+.game-hero-icon { width: 120px; height: 120px; object-fit: contain; margin: 0 auto 8px; filter: drop-shadow(0 0 20px rgba(255, 208, 0, .3)); }
+.how { margin: 0; padding-left: 18px; color: var(--muted); }
+.how li { margin: 4px 0; }
+.play-actions { display: grid; gap: 10px; }
+
+.swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+.swatch {
+  width: 38px; height: 38px; border-radius: 50%; border: 3px solid transparent;
+  box-shadow: 0 0 0 2px #000 inset; font-weight: 800; color: #000; font-size: 13px;
+}
+.swatch.on { border-color: #fff; box-shadow: 0 0 0 2px #000 inset, 0 0 14px rgba(255, 255, 255, .5); }
+.swatch:disabled { opacity: .35; cursor: not-allowed; }
+
+body.in-game { --player-h: 0px; }
+body.in-game .tabbar, body.in-game .mini-player { display: none; }
+.game-layer {
+  position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column;
+  background: #07070c; touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.game-top {
+  display: flex; align-items: center; gap: 10px; flex: none;
+  padding: calc(6px + var(--safe-t)) 10px 6px; background: rgba(0, 0, 0, .5);
+}
+.game-title { font-weight: 800; white-space: nowrap; }
+.game-info { flex: 1; display: flex; justify-content: flex-end; align-items: center; gap: 12px; font-weight: 700; font-size: 14px; min-width: 0; overflow: hidden; }
+.game-info .pill { background: rgba(255, 255, 255, .1); padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.game-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; padding-bottom: var(--safe-b); }
+.game-stage > canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.game-stage .spinner { margin-top: 30vh; }
+.game-overlay { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; text-align: center; }
+.game-overlay .big { font-size: clamp(40px, 12vw, 96px); font-weight: 900; text-shadow: 0 0 30px rgba(0, 0, 0, .8); }
+.touch-btn {
+  position: absolute; bottom: calc(18px + var(--safe-b)); width: 76px; height: 76px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, .25); background: rgba(255, 255, 255, .1); color: #fff;
+  display: grid; place-items: center; font-size: 30px; font-weight: 900; touch-action: none;
+}
+.touch-btn.active { background: rgba(255, 255, 255, .28); }
+.touch-btn img { width: 60%; height: 60%; object-fit: contain; }
+
+.lobby { max-width: 560px; margin: 0 auto; padding: 16px; height: 100%; overflow-y: auto; touch-action: pan-y; user-select: text; }
+.room-code {
+  display: flex; flex-direction: column; align-items: center; width: 100%; margin-bottom: 16px;
+  padding: 14px; border-radius: var(--radius); border: 2px dashed rgba(255, 208, 0, .5); background: rgba(255, 208, 0, .07); color: var(--text);
+}
+.room-code b { font-size: 44px; letter-spacing: .2em; color: var(--accent); line-height: 1.1; }
+.room-code small { color: var(--muted); }
+.lobby-list { list-style: none; margin: 0; padding: 0; }
+.lobby-player { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.lobby-player img { width: 40px; height: 40px; object-fit: contain; }
+.lobby-player .who { flex: 1; min-width: 0; font-weight: 700; }
+.lobby-player small { display: inline-block; margin-left: 6px; color: var(--muted); font-weight: 500; }
+
+.results { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; background: rgba(0, 0, 0, .6); padding: 16px; animation: fade .2s; }
+.results-card { width: min(440px, 100%); max-height: 90%; overflow-y: auto; background: var(--surface); border-radius: 20px; padding: 20px; text-align: center; }
+.results-card h2 { margin: 0 0 4px; font-size: 24px; }
+.results-card ol { list-style: none; margin: 14px 0; padding: 0; text-align: left; }
+.result-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; }
+.result-row.winner { background: rgba(255, 208, 0, .12); }
+.result-row .place { width: 36px; font-weight: 800; color: var(--muted); }
+.result-row.winner .place { color: var(--accent); }
+.result-row img { width: 36px; height: 36px; object-fit: contain; }
+.result-row .who { flex: 1; font-weight: 700; min-width: 0; }
+.result-row .who small { display: block; color: var(--muted); font-weight: 500; }
+.results-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+/* StarWordle */
+.wordle {
+  height: 100%; max-width: 500px; margin: 0 auto; padding: 10px 8px 12px;
+  display: flex; flex-direction: column; gap: 10px; touch-action: manipulation;
+}
+.wordle-tabs { margin: 0; flex: none; }
+.wordle-board { flex: 1; min-height: 0; display: grid; grid-template-rows: repeat(6, 1fr); gap: 6px; justify-content: center; align-content: center; }
+.wordle-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; height: 100%; max-height: 64px; aspect-ratio: 5 / 1.02; }
+.wordle-row.shake { animation: shake .4s; }
+.tile {
+  display: grid; place-items: center; border: 2px solid #3a3a3c; border-radius: 6px;
+  font-size: clamp(20px, 5vh, 32px); font-weight: 800; text-transform: uppercase; aspect-ratio: 1;
+}
+.tile.filled { border-color: #6b6b70; animation: pop .1s; }
+.tile.flip { animation: flip .5s ease both; }
+.tile.hit { background: #30a14e; border-color: #30a14e; }
+.tile.near { background: #d4a20f; border-color: #d4a20f; }
+.tile.miss { background: #3a3a3c; border-color: #3a3a3c; }
+.wordle-msg { min-height: 24px; text-align: center; color: var(--muted); font-weight: 600; flex: none; }
+.wordle-end { display: grid; gap: 10px; justify-items: center; color: var(--text); }
+.wordle-end > b { font-size: 18px; }
+.wordle-stats { display: flex; gap: 18px; }
+.wordle-stats div { display: flex; flex-direction: column; align-items: center; }
+.wordle-stats b { font-size: 20px; }
+.wordle-stats span { font-size: 11px; color: var(--muted); }
+.wordle-keys { display: grid; gap: 6px; flex: none; }
+.key-row { display: flex; gap: 5px; justify-content: center; }
+.key {
+  flex: 1; max-width: 44px; height: 54px; border: 0; border-radius: 6px;
+  background: #818384; color: #fff; font-weight: 700; text-transform: uppercase; font-size: 15px;
+}
+.key.wide { max-width: 68px; flex: 1.5; font-size: 12px; }
+.key.hit { background: #30a14e; }
+.key.near { background: #d4a20f; }
+.key.miss { background: #3a3a3c; }
+@keyframes flip { 0% { transform: rotateX(0); } 50% { transform: rotateX(90deg); } 100% { transform: rotateX(0); } }
+@keyframes pop { 50% { transform: scale(1.08); } }
+@keyframes shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+
+/* Circle Chaos */
+.chaos { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.chaos-cards {
+  flex: none; display: flex; gap: 8px; padding: 10px; overflow-x: auto; scrollbar-width: none;
+  background: rgba(0, 0, 0, .35); touch-action: pan-x;
+}
+.chaos-cards::-webkit-scrollbar { display: none; }
+.chaos-card {
+  flex: none; width: 78px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 4px 6px; border-radius: 14px; border: 2px solid transparent; background: rgba(255, 255, 255, .05);
+  transition: transform .25s, box-shadow .25s, border-color .25s;
+}
+.chaos-card img { width: 44px; height: 44px; object-fit: contain; }
+.chaos-card .name { font-size: 11px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chaos-card b { font-size: 20px; }
+/* Whoever's turn it is lights up in their team colour. */
+.chaos-card.active {
+  border-color: var(--team); transform: scale(1.06);
+  box-shadow: 0 0 18px var(--team), inset 0 0 14px color-mix(in srgb, var(--team) 40%, transparent);
+  background: color-mix(in srgb, var(--team) 18%, transparent);
+}
+.chaos-card.active img { animation: wiggle 1s ease-in-out infinite; }
+.chaos-card.gone { opacity: .35; }
+.chaos-canvas-wrap { position: relative; flex: 1; min-height: 0; }
+.chaos-canvas-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.chaos-banner {
+  flex: none; padding: 12px 14px calc(12px + var(--safe-b)); text-align: center;
+  background: rgba(0, 0, 0, .45); font-weight: 600; min-height: 56px;
+}
+.chaos-targets { display: flex; gap: 8px; overflow-x: auto; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+.chaos-target {
+  display: flex; align-items: center; gap: 6px; padding: 6px 12px 6px 6px; border-radius: 999px;
+  border: 2px solid var(--team); background: color-mix(in srgb, var(--team) 15%, #111); color: #fff; font-weight: 700;
+}
+.chaos-target img { width: 30px; height: 30px; object-fit: contain; }
+@keyframes wiggle { 50% { transform: rotate(-8deg) scale(1.06); } }
+
+/* LumaKart touch controls */
+.kart-left { left: 16px; }
+.kart-right { left: 104px; }
+.kart-brake { right: 16px; width: 60px; height: 60px; font-size: 20px; bottom: calc(26px + var(--safe-b)); }
+.kart-item {
+  right: 16px; bottom: calc(100px + var(--safe-b)); width: 84px; height: 84px; border-radius: 22px;
+  background: rgba(0, 0, 0, .45); border: 2px dashed rgba(255, 255, 255, .3);
+}
+.kart-item.has-item { border: 2px solid #ffd000; box-shadow: 0 0 20px rgba(255, 208, 0, .5); animation: pop 1s ease-in-out infinite; }
+@media (hover: hover) and (pointer: fine) {
+  .kart-left, .kart-right, .kart-brake { display: none; }
+}
+/* Black cop stars need a glow to show up on dark backgrounds. */
+img.cop { filter: drop-shadow(0 0 3px #ff3b30) drop-shadow(0 0 6px rgba(255, 59, 48, .6)); }

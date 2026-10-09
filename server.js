@@ -10,6 +10,7 @@ const multer = require('multer');
 const { openDb } = require('./lib/db');
 const { TYPES, MAX_REEL_SECONDS, kindOf, probeDuration } = require('./lib/media');
 const { normalizeLinks } = require('./lib/social');
+const { attachRooms } = require('./lib/rooms');
 
 const scrypt = promisify(crypto.scrypt);
 
@@ -132,6 +133,17 @@ function createApp(options = {}) {
       maxAge: SESSION_DAYS * 864e5,
       path: '/',
     });
+  }
+
+  // The signed-in user for a raw request; also used by the game rooms' WebSocket upgrade.
+  function userFromRequest(req) {
+    const token = readCookie(req, SESSION_COOKIE);
+    if (!token) return null;
+    const u = q(
+      `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
+       WHERE s.token_hash = ? AND s.expires_at > ? AND u.banned = 0`,
+    ).get(sha256(token), now());
+    return u ? publicUser(u) : null;
   }
 
   // Resolve the signed-in user (if any) on every request.
@@ -959,6 +971,8 @@ function createApp(options = {}) {
   sweep.unref();
 
   app.locals.db = db;
+  // Call with the HTTP server to enable Luma Playables multiplayer.
+  app.locals.attachRealtime = (server) => attachRooms(server, { userFromRequest });
   return app;
 }
 
@@ -979,8 +993,11 @@ if (require.main === module) {
     }
   });
 
+  const realtime = app.locals.attachRealtime(server);
+
   // Railway sends SIGTERM before replacing a deploy; finish in-flight requests first.
   const shutdown = () => {
+    realtime.close();
     server.close(() => {
       app.locals.db.close();
       process.exit(0);
