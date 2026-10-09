@@ -95,6 +95,37 @@ test('LumaKart race rules', async (t) => {
     assert.match(results.rows[0].score, /^\d+:\d\d\.\d$/);
   });
 
+  await t.test('chase camera: right is right, ahead is up the screen', async () => {
+    const { chaseCamera } = await import('../public/js/play/kart-race.js');
+    // A kart heading "down" the map, which is where the old top-down view
+    // made steering look backwards.
+    for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2, 2.3]) {
+      const kart = { x: 500, y: 300, a };
+      const cam = chaseCamera(kart, 400, 800);
+      const at = (dx, dy) => cam.toScreen(cam.toCam(kart.x + dx, kart.y + dy));
+      const [kx, ky] = at(0, 0);
+      const right = { x: -Math.sin(a) * 80, y: Math.cos(a) * 80 };
+      const ahead = { x: Math.cos(a) * 300, y: Math.sin(a) * 300 };
+      assert.ok(Math.abs(kx - 200) < 1e-6, 'kart is centred');
+      assert.ok(at(right.x, right.y)[0] > kx, `a=${a}: the kart's right is screen right`);
+      assert.ok(at(-right.x, -right.y)[0] < kx, `a=${a}: the kart's left is screen left`);
+      assert.ok(at(ahead.x, ahead.y)[1] < ky, `a=${a}: the road ahead is higher up the screen`);
+      assert.ok(ky > 800 * 0.6 && ky < 800, 'kart sits in the lower part of the screen');
+    }
+    // Steering right turns the heading toward the kart's right-hand side.
+    const R = createRace({ players: PLAYERS.slice(0, 2), laps: 3, onEnd() {} });
+    run(R, 3.5, false);
+    const k = R.karts.get(1);
+    const before = k.a;
+    for (let i = 0; i < 60; i++) {
+      k.input = { s: 1, b: 0, u: 0 };
+      R.step(1 / 120);
+    }
+    const cam = chaseCamera({ x: k.x, y: k.y, a: before }, 400, 800);
+    const ahead = cam.toScreen(cam.toCam(k.x + Math.cos(k.a) * 300, k.y + Math.sin(k.a) * 300));
+    assert.ok(ahead[0] > 200, 'after steering right, the kart points to the right of the screen');
+  });
+
   await t.test('driving backwards over the line does not count as a lap', () => {
     const R = createRace({ players: PLAYERS.slice(0, 2), laps: 3, onEnd() {} });
     run(R, 3, false);

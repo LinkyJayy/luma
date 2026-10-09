@@ -4,6 +4,7 @@ Luma is an installable web app (PWA) with accounts, **Luma Reels** (videos up to
 
 ## Features
 
+- **Home**: the start screen, with everything in one place. It has search, a tile for every section (Reels, Music, Playables, Create, Search, Profile, Settings, and Admin for admins), plus rails of the latest reels, new songs and the five games.
 - **Installable PWA**: manifest, service worker (the app shell works offline), app icons and home-screen shortcuts built from the Luma star logo. It has iOS "Add to Home Screen" support and an Install button in Settings.
 - **Accounts**: sign up, sign in and sign out, change password, display name, bio and profile photo. Sessions use HTTP-only cookies and passwords are hashed with scrypt.
 - **Luma Reels**: a full-screen vertical feed with For You and Following tabs.
@@ -22,7 +23,7 @@ Luma is an installable web app (PWA) with accounts, **Luma Reels** (videos up to
   - **Overview** stats and an **audit log** of every admin action.
   - Comments can be deleted by their author, the reel's author or an admin. Songs can be deleted by the uploader or an admin.
 - **Luma Playables** (`#/play`, the **Play** tab): five games. Multiplayer uses rooms with a 4-letter code or invite link; you need to be signed in to host or join. Every multiplayer game offers 13 team colours: red, orange, yellow, green, teal, blue, purple, pink, hot pink, white, light gray, dark gray and brown. Characters and circles are recoloured to match each team.
-  - **LumaKart** (2–8 players): a night-time race where each player is a star kart in their chosen colour, racing 1, 3 or 5 laps. Item boxes give power-ups: **Double speed** (1.5× speed), **Triple speed** (2× speed) and **Thunder** (2× speed, and freezes everyone else for 5 seconds).
+  - **LumaKart** (2–8 players): a night-time race where each player is a star kart in their chosen colour, racing 1, 3 or 5 laps. The camera follows from behind your kart, so ◀/▶ always steer the way they point. Item boxes give power-ups: **Double speed** (1.5× speed), **Triple speed** (2× speed) and **Thunder** (2× speed, and freezes everyone else for 5 seconds).
   - **Circle Chaos** (2–8 players): 15 rounds, so 15 turns each. On your turn your character lights up in your team colour. Tap a circle in your colour (+1) or a rainbow circle: **−2** or **−4** takes that many from any player you choose and gives them to you. Most circles wins.
   - **StarEscape** (solo or multiplayer): a Subway Surfers-style runner. Switch lanes, jump and slide past barriers and trains, and collect bolts while a black-star cop chases you. In multiplayer the host decides who runs and who plays a cop: one cop against everyone, or any mix.
   - **StarInvaders** (solo or multiplayer): Space Invaders, where your star fires bolts at circles worth 10–50 points each. Rounds last 2 minutes and the highest score wins.

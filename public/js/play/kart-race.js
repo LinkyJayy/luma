@@ -271,3 +271,38 @@ export function createRace({ players, laps, onEnd }) {
 
   return { track, boxes, karts, race, step, snapshot };
 }
+
+// A chase camera sitting behind and above a kart, looking where it's going.
+// Returns helpers that map world points (x, y, height) to camera space
+// ([right, up, depth]) and then to the screen.
+export function chaseCamera({ x, y, a }, W, H, { back = 300, height = 140, pitch = 0.2, zoom = 1 } = {}) {
+  const fx = Math.cos(a);
+  const fy = Math.sin(a);
+  // The kart's right-hand side. y grows downward on the map, so turning
+  // right (a increasing) swings the heading toward this vector.
+  const rx = -fy;
+  const ry = fx;
+  const cx = x - fx * back;
+  const cy = y - fy * back;
+  const cp = Math.cos(pitch);
+  const sp = Math.sin(pitch);
+  const focal = H * 0.78 * zoom;
+  const horizon = H * 0.34;
+  const centerY = horizon + Math.tan(pitch) * focal;
+  return {
+    focal,
+    horizon,
+    yaw: a,
+    toCam(wx, wy, wz = 0) {
+      const dx = wx - cx;
+      const dy = wy - cy;
+      const depth0 = dx * fx + dy * fy;
+      const right = dx * rx + dy * ry;
+      const up0 = wz - height;
+      return [right, up0 * cp + depth0 * sp, depth0 * cp - up0 * sp];
+    },
+    toScreen(c) {
+      return [W / 2 + (c[0] * focal) / c[2], centerY - (c[1] * focal) / c[2]];
+    },
+  };
+}

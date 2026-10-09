@@ -3,7 +3,7 @@
   "short_name": "Luma",
   "description": "Reels, pictures and music.",
   "id": "/",
-  "start_url": "/#/reels",
+  "start_url": "/#/home",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
@@ -16,6 +16,7 @@
     { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
+    { "name": "Home", "url": "/#/home", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Luma Reels", "url": "/#/reels", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Luma Music", "url": "/#/music", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Luma Playables", "url": "/#/play", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },

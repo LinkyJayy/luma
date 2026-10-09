@@ -166,7 +166,7 @@ function uploadForm(path, form, onProgress, method = 'POST') {
 
 function requireLogin() {
   if (state.me) return true;
-  location.hash = `#/login?next=${encodeURIComponent(location.hash.slice(1) || '/reels')}`;
+  location.hash = `#/login?next=${encodeURIComponent(location.hash.slice(1) || '/home')}`;
   return false;
 }
 
@@ -1276,7 +1276,7 @@ function viewSettings() {
     await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
     state.me = null;
     toast('Signed out');
-    location.hash = '#/reels';
+    location.hash = '#/home';
   });
 }
 
@@ -1624,7 +1624,7 @@ function viewSearch(params) {
 // ---------- auth ----------
 
 function viewAuth(mode, params) {
-  const next = params.get('next') || '/reels';
+  const next = params.get('next') || '/home';
   if (state.me) {
     location.hash = `#${next}`;
     return;
@@ -1671,6 +1671,122 @@ function viewAuth(mode, params) {
   });
 }
 
+// ---------- home ----------
+
+const HOME_GAMES = [
+  { id: 'kart', name: 'LumaKart', img: '/img/play/star.png', sub: 'Night race · 2–8' },
+  { id: 'chaos', name: 'Circle Chaos', img: '/img/play/star-face.png', sub: 'Steal circles · 2–8' },
+  { id: 'escape', name: 'StarEscape', img: '/img/play/star.png', sub: 'Outrun the cop', tint: '#ff2d95' },
+  { id: 'invaders', name: 'StarInvaders', img: '/img/play/bolt.png', sub: 'Blast circles' },
+  { id: 'wordle', name: 'StarWordle', img: '/img/play/circle.png', sub: 'Daily word' },
+];
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+}
+
+// Everything in one place: search, every section, and what's new.
+async function viewHome() {
+  const me = state.me;
+  const tile = (href, label, sub, iconSvg, hue) =>
+    html`<a class="home-tile" href="${href}" style="--hue:${hue}"><span class="home-tile-icon">${iconSvg}</span><b>${label}</b><small>${sub}</small></a>`;
+  const svg = {
+    reels: html`<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 9v6l5-3z" fill="currentColor"/></svg>`,
+    music: html`<svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="6.5" cy="18" r="2.5" fill="currentColor"/><circle cx="17.5" cy="16" r="2.5" fill="currentColor"/></svg>`,
+    play: html`<svg viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="11" rx="5.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7.5 10.5v4M5.5 12.5h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="15.5" cy="11.5" r="1.3" fill="currentColor"/><circle cx="18" cy="14" r="1.3" fill="currentColor"/></svg>`,
+    create: html`<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`,
+    search: html`<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
+    profile: html`<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
+  };
+
+  render(
+    viewEl,
+    html`<div class="page home">
+      <div class="home-head">
+        <div class="brand"><img src="/img/logo.png" alt=""><div><small class="hint">${greeting()}${me ? html`, ${me.displayName}` : ''}</small><h1>Luma</h1></div></div>
+        ${me ? html`<a href="#/u/${me.username}" aria-label="Your profile">${avatar(me)}</a>` : html`<a class="btn primary small" href="#/login?next=%2Fhome">Sign in</a>`}
+      </div>
+      <form class="home-search" role="search">
+        ${svg.search}<input class="input" name="q" type="search" placeholder="Search people and songs" autocomplete="off">
+      </form>
+      <div class="home-tiles">
+        ${tile('#/reels', 'Reels', 'Videos & pictures', svg.reels, 330)}
+        ${tile('#/music', 'Music', 'Luma Music', svg.music, 200)}
+        ${tile('#/play', 'Playables', '5 games', svg.play, 140)}
+        ${tile('#/upload', 'Create', 'Reel, pictures, song', svg.create, 45)}
+        ${tile('#/search', 'Search', 'People & songs', svg.search, 260)}
+        ${tile(me ? '#/me' : '#/login?next=%2Fme', 'Profile', me ? `@${me.username}` : 'Sign in', svg.profile, 15)}
+        ${me?.isAdmin ? tile('#/admin', 'Admin', me.isOwner ? 'Owner tools' : 'Moderation', icon.shield, 50) : ''}
+        ${me ? tile('#/settings', 'Settings', 'Profile & app', icon.gear, 220) : ''}
+      </div>
+
+      <div class="home-section"><h2>Latest reels</h2><a href="#/reels">See all</a></div>
+      <div class="rail" data-reels>${spinner}</div>
+
+      <div class="home-section"><h2>New on Luma Music</h2><a href="#/music">See all</a></div>
+      <div class="rail" data-songs>${spinner}</div>
+
+      <div class="home-section"><h2>Luma Playables</h2><a href="#/play">See all</a></div>
+      <div class="rail">${HOME_GAMES.map(
+        (g) =>
+          html`<a class="rail-game" href="#/play/${g.id}"><img src="${g.img}" alt="" data-tint="${g.tint || ''}"><b>${g.name}</b><small>${g.sub}</small></a>`,
+      )}</div>
+    </div>`,
+  );
+
+  $('.home-search', viewEl).addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = e.target.q.value.trim();
+    location.hash = q ? `#/search?q=${encodeURIComponent(q)}` : '#/search';
+  });
+
+  // Tinted game icons come from the Playables sprite helper.
+  const tinted = $$('img[data-tint]:not([data-tint=""])', viewEl);
+  if (tinted.length) {
+    import('/js/play/common.js').then(({ spriteURL }) =>
+      tinted.forEach(async (img) => (img.src = await spriteURL('star', img.dataset.tint, 160))),
+    );
+  }
+
+  const reelsEl = $('[data-reels]', viewEl);
+  const songsEl = $('[data-songs]', viewEl);
+  const [feed, songs] = await Promise.allSettled([api('/api/feed'), api('/api/tracks')]);
+
+  if (feed.status === 'fulfilled' && feed.value.items.length) {
+    render(
+      reelsEl,
+      feed.value.items.slice(0, 10).map(
+        (p) =>
+          html`<a class="rail-reel" href="#/p/${p.id}">${
+            p.type === 'video'
+              ? html`<video src="${p.media[0]}#t=0.5" muted playsinline preload="metadata"></video><span class="badge">${icon.play}${fmtTime(p.duration)}</span>`
+              : html`<img src="${p.media[0]}" alt="" loading="lazy">${p.media.length > 1 ? html`<span class="badge">${icon.photos}${p.media.length}</span>` : ''}`
+          }<span class="rail-by">${p.author.displayName}${verifiedBadge(p.author.verified)}</span></a>`,
+      ),
+    );
+  } else {
+    render(reelsEl, html`<a class="rail-empty" href="#/upload">No reels yet. Post the first one →</a>`);
+  }
+
+  if (songs.status === 'fulfilled' && songs.value.items.length) {
+    const tracks = songs.value.items.slice(0, 10);
+    render(
+      songsEl,
+      tracks.map(
+        (t, i) =>
+          html`<button class="rail-song" data-i="${i}"><img src="${t.cover}" alt="" loading="lazy"><b>${t.title}</b><small>${t.artist}</small></button>`,
+      ),
+    );
+    songsEl.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-i]');
+      if (b) player.play(tracks, Number(b.dataset.i));
+    });
+  } else {
+    render(songsEl, html`<a class="rail-empty" href="#/upload?type=song">No songs yet. Upload the first one →</a>`);
+  }
+}
+
 // ---------- router ----------
 
 async function route() {
@@ -1678,13 +1794,13 @@ async function route() {
   activeReelsCleanup = null;
   $('#sheet-root').replaceChildren();
 
-  const hash = location.hash.slice(1) || '/reels';
+  const hash = location.hash.slice(1) || '/home';
   const [path, query = ''] = hash.split('?');
   const params = new URLSearchParams(query);
   const parts = path.split('/').filter(Boolean);
   const [section, arg] = parts;
 
-  const tab = { reels: 'reels', p: 'reels', search: 'search', upload: 'upload', music: 'music', me: 'me', settings: 'me', admin: 'me', play: 'play' }[section] ||
+  const tab = { home: 'home', reels: 'reels', p: 'reels', search: 'home', upload: 'upload', music: 'music', me: 'me', settings: 'me', admin: 'me', play: 'play' }[section] ||
     (section === 'u' && state.me && arg === state.me.username ? 'me' : '');
   $$('.tabbar a').forEach((a) => a.classList.toggle('active', a.dataset.tab === tab));
   viewEl.scrollTop = 0;
@@ -1692,6 +1808,9 @@ async function route() {
   let cleanup;
   switch (section) {
     case undefined:
+    case 'home':
+      await viewHome();
+      break;
     case 'reels':
       cleanup = viewReels(params);
       break;
